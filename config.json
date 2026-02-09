@@ -36,7 +36,8 @@
   "logic": {
     "stable_reads": 2,
     "min_len": 3,
-    "max_len": 15
+    "max_len": 15,
+    "loop_sleep_sec": 0.05
   },
 
   "api": {
@@ -51,7 +52,9 @@
 
     "cache_variant_check": 4,
 
-    "queue_maxsize": 800
+    "queue_maxsize": 800,
+    "auth_401_cooldown_sec": 60.0,
+    "auth_401_max_failures": 3
   },
 
   "debug": {
