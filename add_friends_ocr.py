@@ -199,27 +199,47 @@ def _replace_one_at_a_time(s: str, old: str, new: str, limit: int = 6) -> list[s
     return out
 
 
-def gen_retry_candidates(tag: str, max_candidates: int = 8, max_depth: int = 2) -> list[str]:
-    if not tag:
-        return []
-
-    RULES: list[tuple[str, str]] = [
+def retry_rules_for(ruleset: str) -> list[tuple[str, str]]:
+    base_rules = [
         ("e", "a"), ("E", "A"),
         ("a", "e"), ("A", "E"),
 
+        ("S", "5"), ("s", "5"), ("5", "S"),
+
+        ("M", "H"), ("H", "M"),
+        ("m", "h"), ("h", "m"),
+    ]
+
+    aggressive_rules = [
         ("s", "a"), ("S", "A"),
         ("a", "s"), ("A", "S"),
-
-        ("S", "5"), ("s", "5"), ("5", "S"),
 
         ("O", "D"), ("D", "O"),
         ("O", "R"), ("R", "O"),
         ("o", "d"), ("d", "o"),
         ("o", "r"), ("r", "o"),
-
-        ("M", "H"), ("H", "M"),
-        ("m", "h"), ("h", "m"),
     ]
+
+    normalized = str(ruleset or "").strip().lower()
+    if normalized == "aggressive":
+        return base_rules + aggressive_rules
+    if normalized == "strict":
+        return [
+            ("e", "a"), ("E", "A"),
+            ("a", "e"), ("A", "E"),
+            ("S", "5"), ("s", "5"), ("5", "S"),
+        ]
+    return base_rules
+
+
+def gen_retry_candidates(
+    tag: str,
+    rules: list[tuple[str, str]],
+    max_candidates: int = 8,
+    max_depth: int = 2,
+) -> list[str]:
+    if not tag:
+        return []
 
     PER_RULE_LIMIT = 4
     seen: set[str] = {tag}
@@ -231,7 +251,7 @@ def gen_retry_candidates(tag: str, max_candidates: int = 8, max_depth: int = 2) 
         if depth >= max_depth:
             continue
 
-        for old, new in RULES:
+        for old, new in rules:
             if old not in cur:
                 continue
             for v in _replace_one_at_a_time(cur, old, new, limit=PER_RULE_LIMIT):
@@ -495,6 +515,7 @@ def ocr_one_line(
     scale: float,
     autocontrast: bool,
     blur_radius: float,
+    whitelist: str,
 ) -> str:
     g = ImageOps.grayscale(img)
     if autocontrast:
@@ -511,7 +532,7 @@ def ocr_one_line(
     cfg = (
         f"--psm {int(psm)} --oem {int(oem)} "
         f"-c preserve_interword_spaces=1 "
-        f"-c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 "
+        f"-c tessedit_char_whitelist={whitelist} "
         f"-c load_system_dawg=0 -c load_freq_dawg=0"
     )
     text = pytesseract.image_to_string(g, lang=lang, config=cfg)
@@ -541,6 +562,7 @@ def api_worker(
     cache_lock: threading.Lock,
     account_mgr: AccountManager,
     limiter: RequestLimiter,
+    retry_rules: list[tuple[str, str]],
     max_candidates: int,
     max_depth: int,
     cache_variant_check: int,
@@ -621,7 +643,12 @@ def api_worker(
                 cached = cache.lookup(tag)
 
             if not cached:
-                variants = gen_retry_candidates(tag, max_candidates=max_candidates, max_depth=max_depth)
+                variants = gen_retry_candidates(
+                    tag,
+                    retry_rules,
+                    max_candidates=max_candidates,
+                    max_depth=max_depth,
+                )
                 for alt in variants[:max(0, cache_variant_check)]:
                     with cache_lock:
                         cached = cache.lookup(alt)
@@ -722,7 +749,12 @@ def api_worker(
                     continue
 
                 # NOTFOUND -> retry candidates
-                candidates = gen_retry_candidates(tag, max_candidates=max_candidates, max_depth=max_depth)
+                candidates = gen_retry_candidates(
+                    tag,
+                    retry_rules,
+                    max_candidates=max_candidates,
+                    max_depth=max_depth,
+                )
                 did = False
 
                 for alt in candidates:
@@ -868,6 +900,12 @@ def main() -> None:
     scale = float(ocr_cfg.get("scale", 4.0))
     autocontrast = bool(ocr_cfg.get("autocontrast", True))
     blur_radius = float(ocr_cfg.get("blur_radius", 0.6))
+    whitelist = str(
+        ocr_cfg.get(
+            "whitelist",
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ",
+        )
+    )
 
     # logic
     logic = cfg.get("logic", {})
@@ -892,6 +930,8 @@ def main() -> None:
     queue_maxsize = int(api_cfg.get("queue_maxsize", 800))
     auth_401_cooldown_sec = float(api_cfg.get("auth_401_cooldown_sec", 60.0))
     auth_401_max_failures = int(api_cfg.get("auth_401_max_failures", 3))
+    retry_ruleset = str(api_cfg.get("retry_ruleset", "balanced"))
+    retry_rules = retry_rules_for(retry_ruleset)
 
     limiter = RequestLimiter(min_interval_sec=min_req_interval, jitter_sec=0.15)
 
@@ -946,6 +986,7 @@ def main() -> None:
                 cache_lock,
                 account_mgr,
                 limiter,
+                retry_rules,
                 max_candidates,
                 max_depth,
                 cache_variant_check,
@@ -979,6 +1020,7 @@ def main() -> None:
                     scale=scale,
                     autocontrast=autocontrast,
                     blur_radius=blur_radius,
+                    whitelist=whitelist,
                 )
 
                 if not (min_len <= len(tag) <= max_len):
