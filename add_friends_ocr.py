@@ -417,6 +417,8 @@ class SessionInfo:
         self.my_xuid = ""
         self.my_gamertag = ""
         self.blocked_until = 0.0  # monotonic
+        self.auth_failures = 0
+        self.disabled = False
 
     @property
     def log_prefix(self) -> str:
@@ -462,6 +464,8 @@ class AccountManager:
 
         for i in range(len(self.sessions)):
             idx = (self.current_idx + i) % len(self.sessions)
+            if self.sessions[idx].disabled:
+                continue
             if now >= self.sessions[idx].blocked_until:
                 if idx != self.current_idx:
                     self.current_idx = idx
@@ -469,7 +473,10 @@ class AccountManager:
                     print(f"[SWITCH] Аккаунт изменен на: {self.sessions[self.current_idx].log_prefix}")
                 return self.sessions[idx]
 
-        best_idx = min(range(len(self.sessions)), key=lambda j: self.sessions[j].blocked_until)
+        available = [i for i, sess in enumerate(self.sessions) if not sess.disabled]
+        if not available:
+            raise RuntimeError("Все аккаунты отключены (AUTH_401). Обновите токены.")
+        best_idx = min(available, key=lambda j: self.sessions[j].blocked_until)
         if best_idx != self.current_idx:
             self.current_idx = best_idx
             self.last_switch_time = now
@@ -537,6 +544,8 @@ def api_worker(
     max_candidates: int,
     max_depth: int,
     cache_variant_check: int,
+    auth_401_cooldown_sec: float,
+    auth_401_max_failures: int,
 ) -> None:
     while not stop_event.is_set():
         try:
@@ -551,7 +560,6 @@ def api_worker(
             now_m = time.monotonic()
             if not_before and not_before > now_m:
                 requeue_at = not_before
-                time.sleep(min(0.25, not_before - now_m))
                 continue
 
             tag = norm_text(tag)
@@ -570,6 +578,21 @@ def api_worker(
                 requeue_at = acc.blocked_until
                 continue
 
+            def on_auth_401() -> None:
+                acc.auth_failures += 1
+                acc.blocked_until = time.monotonic() + float(auth_401_cooldown_sec)
+                if acc.auth_failures >= auth_401_max_failures:
+                    acc.disabled = True
+                    print(
+                        f"{acc.log_prefix}[AUTH] 401 ({acc.auth_failures}x). "
+                        "Аккаунт отключен — обновите токен."
+                    )
+                else:
+                    print(
+                        f"{acc.log_prefix}[AUTH] 401 ({acc.auth_failures}/{auth_401_max_failures}). "
+                        f"Пауза {auth_401_cooldown_sec:.1f}s, затем повтор."
+                    )
+
             # ensure profile for THIS account using THIS account session
             def ensure_profile() -> bool:
                 try:
@@ -583,7 +606,7 @@ def api_worker(
                     return False
                 except RuntimeError as e:
                     if str(e) == "AUTH_401":
-                        print(f"{acc.log_prefix}[AUTH] 401 (profile). Проверь токен.")
+                        on_auth_401()
                         return False
                     raise
 
@@ -818,17 +841,20 @@ def main() -> None:
     # overlay
     overlay = cfg.get("overlay", {})
     if bool(overlay.get("enabled", True)):
-        th = threading.Thread(
-            target=start_overlay,
-            args=(
-                left, top, width, height,
-                int(overlay.get("border_px", 2)),
-                str(overlay.get("label", "")),
-                bool(overlay.get("click_through", True)),
-            ),
-            daemon=True,
-        )
-        th.start()
+        if os.name != "nt":
+            print("[INFO] Overlay доступен только на Windows — пропуск.")
+        else:
+            th = threading.Thread(
+                target=start_overlay,
+                args=(
+                    left, top, width, height,
+                    int(overlay.get("border_px", 2)),
+                    str(overlay.get("label", "")),
+                    bool(overlay.get("click_through", True)),
+                ),
+                daemon=True,
+            )
+            th.start()
 
     # ocr config
     ocr_cfg = cfg.get("ocr", {})
@@ -844,6 +870,7 @@ def main() -> None:
     stable_reads = int(logic.get("stable_reads", 2))
     min_len = int(logic.get("min_len", 3))
     max_len = int(logic.get("max_len", 15))
+    loop_sleep_sec = float(logic.get("loop_sleep_sec", 0.05))
 
     # debug
     debug = cfg.get("debug", {})
@@ -859,6 +886,8 @@ def main() -> None:
     max_depth = int(api_cfg.get("max_depth", 2))
     cache_variant_check = int(api_cfg.get("cache_variant_check", 4))
     queue_maxsize = int(api_cfg.get("queue_maxsize", 800))
+    auth_401_cooldown_sec = float(api_cfg.get("auth_401_cooldown_sec", 60.0))
+    auth_401_max_failures = int(api_cfg.get("auth_401_max_failures", 3))
 
     limiter = RequestLimiter(min_interval_sec=min_req_interval, jitter_sec=0.15)
 
@@ -881,6 +910,9 @@ def main() -> None:
                 sess.my_gamertag = gt
                 print(f"OK -> {sess.log_prefix}")
             except Exception as e:
+                if str(e) == "AUTH_401":
+                    sess.auth_failures = auth_401_max_failures
+                    sess.disabled = True
                 print(f"FAIL: {e}")
         print("=========================================\n")
     else:
@@ -913,6 +945,8 @@ def main() -> None:
                 max_candidates,
                 max_depth,
                 cache_variant_check,
+                auth_401_cooldown_sec,
+                auth_401_max_failures,
             ),
             daemon=True,
         )
@@ -979,7 +1013,7 @@ def main() -> None:
                                         except queue.Full:
                                             pending.discard(k)
 
-                time.sleep(0.01)
+                time.sleep(max(0.01, loop_sleep_sec))
 
         except KeyboardInterrupt:
             stop_event.set()
