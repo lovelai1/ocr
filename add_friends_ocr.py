@@ -786,6 +786,10 @@ def api_worker(
                 drop_pending = True
                 continue
 
+        except requests.RequestException as e:
+            acc.blocked_until = time.monotonic() + 5.0
+            print(f"{acc.log_prefix}[NET] {type(e).__name__}: {e}")
+            requeue_at = acc.blocked_until
         finally:
             # requeue если надо
             if requeue_at is not None:
