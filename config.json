@@ -1,0 +1,61 @@
+{
+  "tokens_paths": [
+    "1.json",
+    "2.json",
+    "3.json",
+    "4.json"
+  ],
+  "processed_path": "processed.json",
+
+  "tesseract_cmd": "C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
+  "tessdata_dir": "C:\\Program Files\\Tesseract-OCR\\tessdata",
+
+  "capture_region": {
+    "left": 172,
+    "top": 933,
+    "width": 263,
+    "height": 28
+  },
+
+  "overlay": {
+    "enabled": true,
+    "border_px": 2,
+    "label": "",
+    "click_through": true
+  },
+
+  "ocr": {
+    "lang": "mc",
+    "psm": 7,
+    "oem": 1,
+    "scale": 4.0,
+    "autocontrast": true,
+    "blur_radius": 0.6
+  },
+
+  "logic": {
+    "stable_reads": 2,
+    "min_len": 3,
+    "max_len": 15
+  },
+
+  "api": {
+    "enabled": true,
+
+    "switch_interval_sec": 6.0,
+
+    "min_request_interval_sec": 2.2,
+
+    "max_candidates": 8,
+    "max_depth": 2,
+
+    "cache_variant_check": 4,
+
+    "queue_maxsize": 800
+  },
+
+  "debug": {
+    "print_ocr": true,
+    "print_events": true
+  }
+}
