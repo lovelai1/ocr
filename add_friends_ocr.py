@@ -203,23 +203,7 @@ def gen_retry_candidates(tag: str, max_candidates: int = 8, max_depth: int = 2) 
     if not tag:
         return []
 
-    RULES: list[tuple[str, str]] = [
-        ("e", "a"), ("E", "A"),
-        ("a", "e"), ("A", "E"),
-
-        ("s", "a"), ("S", "A"),
-        ("a", "s"), ("A", "S"),
-
-        ("S", "5"), ("s", "5"), ("5", "S"),
-
-        ("O", "D"), ("D", "O"),
-        ("O", "R"), ("R", "O"),
-        ("o", "d"), ("d", "o"),
-        ("o", "r"), ("r", "o"),
-
-        ("M", "H"), ("H", "M"),
-        ("m", "h"), ("h", "m"),
-    ]
+    RULES: list[tuple[str, str]] = []
 
     PER_RULE_LIMIT = 4
     seen: set[str] = {tag}
