@@ -203,7 +203,23 @@ def gen_retry_candidates(tag: str, max_candidates: int = 8, max_depth: int = 2) 
     if not tag:
         return []
 
-    RULES: list[tuple[str, str]] = []
+    RULES: list[tuple[str, str]] = [
+        ("e", "a"), ("E", "A"),
+        ("a", "e"), ("A", "E"),
+
+        ("s", "a"), ("S", "A"),
+        ("a", "s"), ("A", "S"),
+
+        ("S", "5"), ("s", "5"), ("5", "S"),
+
+        ("O", "D"), ("D", "O"),
+        ("O", "R"), ("R", "O"),
+        ("o", "d"), ("d", "o"),
+        ("o", "r"), ("r", "o"),
+
+        ("M", "H"), ("H", "M"),
+        ("m", "h"), ("h", "m"),
+    ]
 
     PER_RULE_LIMIT = 4
     seen: set[str] = {tag}
@@ -479,7 +495,6 @@ def ocr_one_line(
     scale: float,
     autocontrast: bool,
     blur_radius: float,
-    sharpen_radius: float,
 ) -> str:
     g = ImageOps.grayscale(img)
     if autocontrast:
@@ -489,8 +504,8 @@ def ocr_one_line(
         w, h = g.size
         g = g.resize((int(w * scale), int(h * scale)), resample=Image.NEAREST)
 
-    if sharpen_radius and sharpen_radius > 0:
-        g = g.filter(ImageFilter.UnsharpMask(radius=float(sharpen_radius), percent=150, threshold=3))
+    if blur_radius and blur_radius > 0:
+        g = g.filter(ImageFilter.GaussianBlur(radius=float(blur_radius)))
 
     # whitelist + отключение словарей часто помогает для геймертегов
     cfg = (
@@ -852,8 +867,7 @@ def main() -> None:
     oem = int(ocr_cfg.get("oem", 1))
     scale = float(ocr_cfg.get("scale", 4.0))
     autocontrast = bool(ocr_cfg.get("autocontrast", True))
-    blur_radius = float(ocr_cfg.get("blur_radius", 0.0))
-    sharpen_radius = float(ocr_cfg.get("sharpen_radius", 0.8)) or blur_radius
+    blur_radius = float(ocr_cfg.get("blur_radius", 0.6))
 
     # logic
     logic = cfg.get("logic", {})
@@ -965,7 +979,6 @@ def main() -> None:
                     scale=scale,
                     autocontrast=autocontrast,
                     blur_radius=blur_radius,
-                    sharpen_radius=sharpen_radius,
                 )
 
                 if not (min_len <= len(tag) <= max_len):
