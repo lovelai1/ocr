@@ -479,6 +479,7 @@ def ocr_one_line(
     scale: float,
     autocontrast: bool,
     blur_radius: float,
+    sharpen_radius: float,
 ) -> str:
     g = ImageOps.grayscale(img)
     if autocontrast:
@@ -488,8 +489,8 @@ def ocr_one_line(
         w, h = g.size
         g = g.resize((int(w * scale), int(h * scale)), resample=Image.NEAREST)
 
-    if blur_radius and blur_radius > 0:
-        g = g.filter(ImageFilter.GaussianBlur(radius=float(blur_radius)))
+    if sharpen_radius and sharpen_radius > 0:
+        g = g.filter(ImageFilter.UnsharpMask(radius=float(sharpen_radius), percent=150, threshold=3))
 
     # whitelist + отключение словарей часто помогает для геймертегов
     cfg = (
@@ -851,7 +852,8 @@ def main() -> None:
     oem = int(ocr_cfg.get("oem", 1))
     scale = float(ocr_cfg.get("scale", 4.0))
     autocontrast = bool(ocr_cfg.get("autocontrast", True))
-    blur_radius = float(ocr_cfg.get("blur_radius", 0.6))
+    blur_radius = float(ocr_cfg.get("blur_radius", 0.0))
+    sharpen_radius = float(ocr_cfg.get("sharpen_radius", 0.8)) or blur_radius
 
     # logic
     logic = cfg.get("logic", {})
@@ -963,6 +965,7 @@ def main() -> None:
                     scale=scale,
                     autocontrast=autocontrast,
                     blur_radius=blur_radius,
+                    sharpen_radius=sharpen_radius,
                 )
 
                 if not (min_len <= len(tag) <= max_len):

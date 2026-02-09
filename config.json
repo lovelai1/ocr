@@ -30,7 +30,8 @@
     "oem": 1,
     "scale": 4.0,
     "autocontrast": true,
-    "blur_radius": 0.6
+    "blur_radius": 0.0,
+    "sharpen_radius": 0.8
   },
 
   "logic": {
