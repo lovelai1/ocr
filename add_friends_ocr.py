@@ -18,8 +18,8 @@ from PIL import Image, ImageOps, ImageFilter
 BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "config.json"
 
-# Ники: только A-Z a-z 0-9, whitespace убираем полностью
-ALLOWED_RE = re.compile(r"[^A-Za-z0-9]+")
+# Ники: разрешаем A-Z a-z 0-9 и пробелы (лишние пробелы сжимаем)
+ALLOWED_RE = re.compile(r"[^A-Za-z0-9 ]+")
 SPACES_RE = re.compile(r"\s+")
 RESOLVED_RE = re.compile(r"resolved=(.+)$", re.IGNORECASE)
 
@@ -36,8 +36,8 @@ def load_config() -> dict:
 def norm_text(s: str) -> str:
     s = (s or "").replace("\x0c", "")
     s = s.strip()
-    s = SPACES_RE.sub("", s)     # убрать пробелы/переносы
-    s = ALLOWED_RE.sub("", s)    # оставить только A-Za-z0-9
+    s = SPACES_RE.sub(" ", s)     # убрать повторяющиеся пробелы/переносы
+    s = ALLOWED_RE.sub("", s)     # оставить только A-Za-z0-9 и пробел
     return s
 
 
@@ -510,7 +510,7 @@ def ocr_one_line(
     # whitelist + отключение словарей часто помогает для геймертегов
     cfg = (
         f"--psm {int(psm)} --oem {int(oem)} "
-        f"-c preserve_interword_spaces=0 "
+        f"-c preserve_interword_spaces=1 "
         f"-c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 "
         f"-c load_system_dawg=0 -c load_freq_dawg=0"
     )
