@@ -203,7 +203,16 @@ def gen_retry_candidates(tag: str, max_candidates: int = 8, max_depth: int = 2) 
     if not tag:
         return []
 
-    RULES: list[tuple[str, str]] = [
+    # ВАЖНО: сначала самые частые OCR-ошибки для латинской O,
+    # чтобы не "вытеснялись" менее важными заменами при небольшом max_candidates.
+    rules_primary: list[tuple[str, str]] = [
+        ("D", "O"), ("O", "D"),
+        ("d", "o"), ("o", "d"),
+        ("0", "O"), ("O", "0"),
+        ("0", "o"), ("o", "0"),
+    ]
+
+    rules_secondary: list[tuple[str, str]] = [
         ("e", "a"), ("E", "A"),
         ("a", "e"), ("A", "E"),
 
@@ -212,14 +221,14 @@ def gen_retry_candidates(tag: str, max_candidates: int = 8, max_depth: int = 2) 
 
         ("S", "5"), ("s", "5"), ("5", "S"),
 
-        ("O", "D"), ("D", "O"),
         ("O", "R"), ("R", "O"),
-        ("o", "d"), ("d", "o"),
         ("o", "r"), ("r", "o"),
 
         ("M", "H"), ("H", "M"),
         ("m", "h"), ("h", "m"),
     ]
+
+    RULES = rules_primary + rules_secondary
 
     PER_RULE_LIMIT = 4
     seen: set[str] = {tag}
