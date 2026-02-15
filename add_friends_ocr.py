@@ -18,8 +18,8 @@ from PIL import Image, ImageOps, ImageFilter
 BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "config.json"
 
-# Ники: разрешаем A-Z a-z 0-9 и пробелы (лишние пробелы сжимаем)
-ALLOWED_RE = re.compile(r"[^A-Za-z0-9 ]+")
+# Ники: разрешаем A-Z a-z 0-9 _ и пробелы (лишние пробелы сжимаем)
+ALLOWED_RE = re.compile(r"[^A-Za-z0-9_ ]+")
 SPACES_RE = re.compile(r"\s+")
 RESOLVED_RE = re.compile(r"resolved=(.+)$", re.IGNORECASE)
 
@@ -37,7 +37,7 @@ def norm_text(s: str) -> str:
     s = (s or "").replace("\x0c", "")
     s = s.strip()
     s = SPACES_RE.sub(" ", s)     # убрать повторяющиеся пробелы/переносы
-    s = ALLOWED_RE.sub("", s)     # оставить только A-Za-z0-9 и пробел
+    s = ALLOWED_RE.sub("", s)     # оставить только A-Za-z0-9, _ и пробел
     return s
 
 
@@ -214,7 +214,6 @@ def gen_retry_candidates(tag: str, max_candidates: int = 8, max_depth: int = 2) 
 
         ("O", "D"), ("D", "O"),
         ("O", "R"), ("R", "O"),
-        ("o", "d"), ("d", "o"),
         ("o", "r"), ("r", "o"),
 
         ("M", "H"), ("H", "M"),
@@ -511,7 +510,7 @@ def ocr_one_line(
     cfg = (
         f"--psm {int(psm)} --oem {int(oem)} "
         f"-c preserve_interword_spaces=1 "
-        f"-c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 "
+        f"-c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_ "
         f"-c load_system_dawg=0 -c load_freq_dawg=0"
     )
     text = pytesseract.image_to_string(g, lang=lang, config=cfg)
